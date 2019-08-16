@@ -163,6 +163,11 @@ func (c *Controller) Services() ([]*model.Service, error) {
 		}
 		clusterAddressesMutex.Unlock()
 	}
+
+	for _, s := range services {
+		log.Infof("1111 %+v", s)
+	}
+
 	return services, errs
 }
 

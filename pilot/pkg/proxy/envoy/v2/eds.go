@@ -454,8 +454,10 @@ func (s *DiscoveryServer) WorkloadUpdate(id string, workloadLabels map[string]st
 			//   case 1: the workload has no sidecar proxy, no need xDS push at all.
 			//   case 2: the workload xDS connection has not been established,
 			//           also no need to trigger a full push here.
-			if connection.modelNode.IPAddresses[0] == id {
-				fullPush = true
+			for _, ip := range connection.modelNode.IPAddresses {
+				if ip == id {
+					fullPush = true
+				}
 			}
 		}
 		adsClientsMutex.RUnlock()

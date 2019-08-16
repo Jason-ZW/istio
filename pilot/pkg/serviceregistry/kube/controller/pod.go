@@ -15,9 +15,12 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
+	mctypes "github.com/intel/multus-cni/types"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 
@@ -27,6 +30,11 @@ import (
 	"istio.io/istio/pkg/config/labels"
 
 	"istio.io/pkg/log"
+)
+
+const (
+	cniNetworkStatus       = "k8s.v1.cni.cncf.io/networks-status"
+	cniStaticMacvlanAttach = "static-macvlan-cni-attach"
 )
 
 // PodCache is an eventually consistent pod cache
@@ -72,6 +80,7 @@ func (pc *PodCache) event(obj interface{}, ev model.Event) error {
 	}
 
 	ip := pod.Status.PodIP
+	mips := pc.getCniAttachMacVLanIPs(pod)
 	// PodIP will be empty when pod is just created, but before the IP is assigned
 	// via UpdateStatus.
 
@@ -87,6 +96,12 @@ func (pc *PodCache) event(obj interface{}, ev model.Event) error {
 				if pc.c != nil && pc.c.XDSUpdater != nil {
 					pc.c.XDSUpdater.WorkloadUpdate(ip, pod.ObjectMeta.Labels, pod.ObjectMeta.Annotations)
 				}
+				for _, mip := range mips {
+					pc.keys[mip] = key
+					if pc.c != nil && pc.c.XDSUpdater != nil {
+						pc.c.XDSUpdater.WorkloadUpdate(mip, pod.ObjectMeta.Labels, pod.ObjectMeta.Annotations)
+					}
+				}
 			}
 		case model.EventUpdate:
 			if pod.DeletionTimestamp != nil {
@@ -95,6 +110,14 @@ func (pc *PodCache) event(obj interface{}, ev model.Event) error {
 					delete(pc.keys, ip)
 					if pc.c != nil && pc.c.XDSUpdater != nil {
 						pc.c.XDSUpdater.WorkloadUpdate(ip, nil, nil)
+					}
+				}
+				for _, mip := range mips {
+					if pc.keys[mip] == key {
+						delete(pc.keys, mip)
+						if pc.c != nil && pc.c.XDSUpdater != nil {
+							pc.c.XDSUpdater.WorkloadUpdate(mip, nil, nil)
+						}
 					}
 				}
 				return nil
@@ -106,12 +129,26 @@ func (pc *PodCache) event(obj interface{}, ev model.Event) error {
 				if pc.c != nil && pc.c.XDSUpdater != nil {
 					pc.c.XDSUpdater.WorkloadUpdate(ip, pod.ObjectMeta.Labels, pod.ObjectMeta.Annotations)
 				}
+				for _, mip := range mips {
+					pc.keys[mip] = key
+					if pc.c != nil && pc.c.XDSUpdater != nil {
+						pc.c.XDSUpdater.WorkloadUpdate(mip, pod.ObjectMeta.Labels, pod.ObjectMeta.Annotations)
+					}
+				}
 			default:
 				// delete if the pod switched to other states and is in the cache
 				if pc.keys[ip] == key {
 					delete(pc.keys, ip)
 					if pc.c != nil && pc.c.XDSUpdater != nil {
 						pc.c.XDSUpdater.WorkloadUpdate(ip, nil, nil)
+					}
+				}
+				for _, mip := range mips {
+					if pc.keys[mip] == key {
+						delete(pc.keys, mip)
+						if pc.c != nil && pc.c.XDSUpdater != nil {
+							pc.c.XDSUpdater.WorkloadUpdate(mip, nil, nil)
+						}
 					}
 				}
 			}
@@ -121,6 +158,14 @@ func (pc *PodCache) event(obj interface{}, ev model.Event) error {
 				delete(pc.keys, ip)
 				if pc.c != nil && pc.c.XDSUpdater != nil {
 					pc.c.XDSUpdater.WorkloadUpdate(ip, nil, nil)
+				}
+			}
+			for _, mip := range mips {
+				if pc.keys[mip] == key {
+					delete(pc.keys, mip)
+					if pc.c != nil && pc.c.XDSUpdater != nil {
+						pc.c.XDSUpdater.WorkloadUpdate(mip, nil, nil)
+					}
 				}
 			}
 		}
@@ -156,4 +201,32 @@ func (pc *PodCache) labelsByIP(addr string) (labels.Instance, bool) {
 		return nil, false
 	}
 	return configKube.ConvertLabels(pod.ObjectMeta), true
+}
+
+func (pc *PodCache) getCniAttachMacVLanIPs(pod *v1.Pod) []string {
+	ips := make([]string, 0)
+	if pod == nil {
+		return ips
+	}
+	if pod.Annotations == nil || len(pod.Annotations) == 0 {
+		return ips
+	}
+	if annotation, ok := pod.Annotations[cniNetworkStatus]; ok {
+		var netStatus []*mctypes.NetworkStatus
+		if annotation == "" || !strings.Contains(annotation, "ips") {
+			return ips
+		}
+
+		err := json.Unmarshal([]byte(annotation), &netStatus)
+		if err != nil {
+			log.Errorf("unmarshal pod's cni network status error: %s\n", err.Error())
+			return ips
+		}
+		for _, status := range netStatus {
+			if status.Name == cniStaticMacvlanAttach {
+				ips = append(ips, status.IPs...)
+			}
+		}
+	}
+	return ips
 }
