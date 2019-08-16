@@ -498,13 +498,21 @@ func (c *Controller) GetProxyServiceInstances(proxy *model.Proxy) ([]*model.Serv
 	proxyIP := proxy.IPAddresses[0]
 	proxyNamespace := ""
 
+	log.Infof("5555 %+v, %+v", proxy.Metadata[model.NodeMetadataNetwork], proxy.IPAddresses)
 	pod := c.pods.getPodByIP(proxyIP)
 	if pod != nil {
-		// for split horizon EDS k8s multi cluster, in case there are pods of the same ip across clusters,
-		// which can happen when multi clusters using same pod cidr.
-		// As we have proxy Network meta, compare it with the network which endpoint belongs to,
-		// if they are not same, ignore the pod, because the pod is in another cluster.
-		if proxy.Metadata[model.NodeMetadataNetwork] != c.endpointNetwork(proxyIP) {
+		isValidNetwork := false
+		for _, ip := range proxy.IPAddresses {
+			// for split horizon EDS k8s multi cluster, in case there are pods of the same ip across clusters,
+			// which can happen when multi clusters using same pod cidr.
+			// As we have proxy Network meta, compare it with the network which endpoint belongs to,
+			// if they are not same, ignore the pod, because the pod is in another cluster.
+			if proxy.Metadata[model.NodeMetadataNetwork] == c.endpointNetwork(ip) {
+				isValidNetwork = true
+				break
+			}
+		}
+		if !isValidNetwork {
 			return out, nil
 		}
 
@@ -559,27 +567,29 @@ func (c *Controller) getProxyServiceInstancesByEndpoint(endpoints v1.Endpoints, 
 	c.RLock()
 	svc := c.servicesMap[hostname]
 	c.RUnlock()
+	log.Infof("aaaa %+v\n", svc)
 
 	if svc != nil {
 		for _, ss := range endpoints.Subsets {
+			log.Infof("bbbb %+v\n", ss)
 			for _, port := range ss.Ports {
 				svcPort, exists := svc.Ports.Get(port.Name)
 				if !exists {
 					continue
 				}
 
-				// There is only one IP for kube registry
-				proxyIP := proxy.IPAddresses[0]
-
-				if hasProxyIP(ss.Addresses, proxyIP) {
-					out = append(out, c.getEndpoints(proxyIP, port.Port, svcPort, svc))
-				}
-
-				if hasProxyIP(ss.NotReadyAddresses, proxyIP) {
-					nrEP := c.getEndpoints(proxyIP, port.Port, svcPort, svc)
-					out = append(out, nrEP)
-					if c.Env != nil {
-						c.Env.PushContext.Add(model.ProxyStatusEndpointNotReady, proxy.ID, proxy, "")
+				for _, ip := range proxy.IPAddresses {
+					log.Infof("cccc %+v\n", ip)
+					if hasProxyIP(ss.Addresses, ip) {
+						out = append(out, c.getEndpoints(ip, port.Port, svcPort, svc))
+					}
+					if hasProxyIP(ss.NotReadyAddresses, ip) {
+						nrEP := c.getEndpoints(ip, port.Port, svcPort, svc)
+						log.Infof("dddd %+v\n", nrEP)
+						out = append(out, nrEP)
+						if c.Env != nil {
+							c.Env.PushContext.Add(model.ProxyStatusEndpointNotReady, proxy.ID, proxy, "")
+						}
 					}
 				}
 			}
@@ -612,11 +622,9 @@ func (c *Controller) getProxyServiceInstancesByPod(pod *v1.Pod, service *v1.Serv
 			log.Warnf("Failed to find port for service %s/%s: %v", service.Namespace, service.Name, err)
 			continue
 		}
-		// There is only one IP for kube registry
-		proxyIP := proxy.IPAddresses[0]
-
-		out = append(out, c.getEndpoints(proxyIP, int32(portNum), svcPort, svc))
-
+		for _, ip := range proxy.IPAddresses {
+			out = append(out, c.getEndpoints(ip, int32(portNum), svcPort, svc))
+		}
 	}
 
 	return out
@@ -722,7 +730,11 @@ func (c *Controller) AppendServiceHandler(f func(*model.Service, model.Event)) e
 		}
 
 		svcConv := kube.ConvertService(*svc, c.domainSuffix, c.ClusterID)
+		log.Infof("6666 %+v\n", svcConv)
 		instances := kube.ExternalNameServiceInstances(*svc, svcConv)
+		for _, i := range instances {
+			log.Infof("7777 %+v\n", i)
+		}
 		switch event {
 		case model.EventDelete:
 			c.Lock()

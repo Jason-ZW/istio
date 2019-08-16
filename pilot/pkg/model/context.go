@@ -199,6 +199,7 @@ func IsApplicationNodeType(nType NodeType) bool {
 func (node *Proxy) ServiceNode() string {
 	ip := ""
 	if len(node.IPAddresses) > 0 {
+		log.Infof("eeee %+v %+v\n", node, node.IPAddresses)
 		ip = node.IPAddresses[0]
 	}
 	return strings.Join([]string{
@@ -256,10 +257,15 @@ func (node *Proxy) SetSidecarScope(ps *PushContext) {
 }
 
 func (node *Proxy) SetServiceInstances(env *Environment) error {
+	log.Infof("rrrr %+v\n", node)
 	instances, err := env.GetProxyServiceInstances(node)
 	if err != nil {
 		log.Errorf("failed to get service proxy service instances: %v", err)
 		return err
+	}
+
+	for _, i := range instances {
+		log.Infof("qqqq %+v\n", i)
 	}
 
 	node.ServiceInstances = instances
@@ -341,23 +347,29 @@ func ParseServiceNodeWithMetadata(s string, metadata map[string]string) (*Proxy,
 	}
 
 	// Get all IP Addresses from Metadata
+	log.Infof("pppp %+v\n", metadata)
 	if ipstr, found := metadata[NodeMetadataInstanceIPs]; found {
 		ipAddresses, err := parseIPAddresses(ipstr)
 		if err == nil {
 			out.IPAddresses = ipAddresses
+			log.Infof("wwww %+v\n", ipAddresses)
 		} else if isValidIPAddress(parts[1]) {
 			//Fail back, use IP from node id
 			out.IPAddresses = append(out.IPAddresses, parts[1])
+			log.Infof("uuuu %+v\n", ipAddresses)
 		}
 	} else if isValidIPAddress(parts[1]) {
 		// Get IP from node id, it's only for backward-compatible, IP should come from metadata
 		out.IPAddresses = append(out.IPAddresses, parts[1])
+		log.Infof("vvvv %+v\n", parts)
 	}
 
 	// Does query from ingress or router have to carry valid IP address?
 	if len(out.IPAddresses) == 0 && out.Type == SidecarProxy {
 		return out, fmt.Errorf("no valid IP address in the service node id or metadata")
 	}
+
+	log.Infof("tttt %+v\n", out)
 
 	out.ID = parts[2]
 	out.DNSDomain = parts[3]
@@ -496,7 +508,7 @@ const (
 	NodeMetadataRouterMode = "ROUTER_MODE"
 
 	// NodeMetadataInstanceIPs is the set of IPs attached to this proxy
-	NodeMetadataInstanceIPs = "INSTANCE_IPS"
+	NodeMetadataInstanceIPs = "ISTIO_META_INSTANCE_IPS"
 
 	// NodeMetadataSdsEnabled specifies whether SDS is enabled.
 	NodeMetadataSdsEnabled = "ISTIO_META_SDS"

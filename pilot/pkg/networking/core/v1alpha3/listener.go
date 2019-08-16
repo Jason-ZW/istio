@@ -303,6 +303,7 @@ func (configgen *ConfigGeneratorImpl) buildSidecarInboundListeners(
 		//	The pilot will generate three listeners, the last one will use protocol sniffing.
 		//
 		for _, instance := range node.ServiceInstances {
+			log.Infof("4444 %+v", instance)
 			endpoint := instance.Endpoint
 			bind := endpoint.Address
 

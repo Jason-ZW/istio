@@ -416,12 +416,14 @@ func debounce(ch chan *model.PushRequest, stopCh <-chan struct{}, fn func(req *m
 
 func (s *DiscoveryServer) checkProxyNeedsFullPush(node *model.Proxy) bool {
 	full := false
-	s.proxyUpdatesMutex.Lock()
-	if _, ok := s.proxyUpdates[node.IPAddresses[0]]; ok {
-		full = true
-		delete(s.proxyUpdates, node.IPAddresses[0])
+	for _, ip := range node.IPAddresses {
+		s.proxyUpdatesMutex.Lock()
+		if _, ok := s.proxyUpdates[ip]; ok {
+			full = true
+			delete(s.proxyUpdates, ip)
+		}
+		s.proxyUpdatesMutex.Unlock()
 	}
-	s.proxyUpdatesMutex.Unlock()
 	return full
 }
 

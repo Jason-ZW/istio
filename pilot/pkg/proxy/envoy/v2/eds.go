@@ -15,6 +15,7 @@
 package v2
 
 import (
+	"istio.io/pkg/log"
 	"reflect"
 	"strconv"
 	"sync"
@@ -431,6 +432,7 @@ func (s *DiscoveryServer) edsIncremental(version string, push *model.PushContext
 
 // WorkloadUpdate is called when workload labels/annotations are updated.
 func (s *DiscoveryServer) WorkloadUpdate(id string, workloadLabels map[string]string, _ map[string]string) {
+	log.Infof("ffff %+v\n", id)
 	inboundWorkloadUpdates.Increment()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -543,6 +545,7 @@ func (s *DiscoveryServer) edsUpdate(shard, serviceName string, namespace string,
 		s.EndpointShardsByService[serviceName][namespace] = ep
 		if !internal {
 			adsLog.Infof("Full push, new service %s", serviceName)
+			adsLog.Infof("gggg %+v\n", ep)
 			requireFull = true
 		}
 	}
@@ -550,6 +553,7 @@ func (s *DiscoveryServer) edsUpdate(shard, serviceName string, namespace string,
 	// 2. Update data for the specific cluster. Each cluster gets independent
 	// updates containing the full list of endpoints for the service in that cluster.
 	for _, e := range istioEndpoints {
+		adsLog.Infof("hhhh %+v\n", e)
 		if e.ServiceAccount != "" {
 			ep.mutex.Lock()
 			_, f = ep.ServiceAccounts[e.ServiceAccount]
@@ -632,6 +636,8 @@ func (s *DiscoveryServer) loadAssignmentsForClusterLegacy(push *model.PushContex
 		return nil
 	}
 
+	log.Infof("iiii %+v, %+v\n", c, clusterName)
+
 	l := loadAssignment(c)
 	if l == nil { // fresh cluster
 		if err := s.updateCluster(push, clusterName, c); err != nil {
@@ -641,6 +647,8 @@ func (s *DiscoveryServer) loadAssignmentsForClusterLegacy(push *model.PushContex
 		}
 		l = loadAssignment(c)
 	}
+
+	log.Infof("jjjj %+v, %+v\n", l, clusterName)
 
 	return l
 }
@@ -710,7 +718,9 @@ func (s *DiscoveryServer) pushEds(push *model.PushContext, con *XdsConnection, v
 
 		_, _, hostname, _ := model.ParseSubsetKey(clusterName)
 		if edsUpdatedServices != nil {
+			log.Infof("8888 %+v\n", hostname)
 			if _, ok := edsUpdatedServices[string(hostname)]; !ok {
+				log.Infof("9999 %+v\n", hostname)
 				// Cluster was not updated, skip recomputing. This happens when we get an incremental update for a
 				// specific Hostname. On connect or for full push edsUpdatedServices will be empty.
 				continue

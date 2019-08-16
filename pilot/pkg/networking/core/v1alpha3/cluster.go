@@ -82,6 +82,9 @@ func getDefaultCircuitBreakerThresholds(direction model.TrafficDirection) *v2Clu
 func (configgen *ConfigGeneratorImpl) BuildClusters(env *model.Environment, proxy *model.Proxy, push *model.PushContext) []*apiv2.Cluster {
 	clusters := make([]*apiv2.Cluster, 0)
 	instances := proxy.ServiceInstances
+	for _, i := range instances {
+		log.Infof("kkkk %+v\n", i)
+	}
 
 	outboundClusters := configgen.buildOutboundClusters(env, proxy, push)
 
@@ -92,6 +95,10 @@ func (configgen *ConfigGeneratorImpl) BuildClusters(env *model.Environment, prox
 	// Add a blackhole and passthrough cluster for catching traffic to unresolved routes
 	// DO NOT CALL PLUGINS for these two clusters.
 	outboundClusters = append(outboundClusters, buildBlackHoleCluster(env), buildDefaultPassthroughCluster(env))
+
+	for _, o := range outboundClusters {
+		log.Infof("llll %+v\n", o)
+	}
 
 	switch proxy.Type {
 	case model.SidecarProxy:
@@ -107,8 +114,13 @@ func (configgen *ConfigGeneratorImpl) BuildClusters(env *model.Environment, prox
 		inboundClusters = append(inboundClusters, generateInboundPassthroughClusters(env)...)
 		inboundClusters = envoyfilter.ApplyClusterPatches(networking.EnvoyFilter_SIDECAR_INBOUND, proxy, push, inboundClusters)
 		clusters = append(clusters, outboundClusters...)
+		for _, o := range outboundClusters {
+			log.Infof("mmmm %+v\n", o)
+		}
 		clusters = append(clusters, inboundClusters...)
-
+		for _, i := range inboundClusters {
+			log.Infof("nnnn %+v\n", i)
+		}
 	default: // Gateways
 		if proxy.Type == model.Router && proxy.GetRouterMode() == model.SniDnatRouter {
 			outboundClusters = append(outboundClusters, configgen.buildOutboundSniDnatClusters(env, proxy, push)...)
@@ -118,6 +130,10 @@ func (configgen *ConfigGeneratorImpl) BuildClusters(env *model.Environment, prox
 	}
 
 	clusters = normalizeClusters(push, proxy, clusters)
+
+	for _, o := range clusters {
+		log.Infof("oooo %+v\n", o)
+	}
 
 	return clusters
 }
@@ -150,6 +166,7 @@ func (configgen *ConfigGeneratorImpl) buildOutboundClusters(env *model.Environme
 	networkView := model.GetNetworkView(proxy)
 
 	for _, service := range push.Services(proxy) {
+		log.Infof("2222 %+v", service)
 		destRule := push.DestinationRule(proxy, service)
 		for _, port := range service.Ports {
 			if port.Protocol == protocol.UDP {
@@ -159,6 +176,9 @@ func (configgen *ConfigGeneratorImpl) buildOutboundClusters(env *model.Environme
 			inputParams.Port = port
 
 			lbEndpoints := buildLocalityLbEndpoints(env, networkView, service, port.Port, nil)
+			for _, ep := range lbEndpoints {
+				log.Infof("3333 %+v", ep)
+			}
 
 			// create default cluster
 			discoveryType := convertResolution(service.Resolution)

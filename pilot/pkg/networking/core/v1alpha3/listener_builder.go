@@ -149,6 +149,9 @@ func NewListenerBuilder(node *model.Proxy) *ListenerBuilder {
 func (builder *ListenerBuilder) buildSidecarInboundListeners(configgen *ConfigGeneratorImpl,
 	env *model.Environment, node *model.Proxy, push *model.PushContext) *ListenerBuilder {
 	builder.inboundListeners = configgen.buildSidecarInboundListeners(env, node, push)
+	for _, l := range builder.inboundListeners {
+		log.Infof("7777 %+v", l)
+	}
 	return builder
 }
 

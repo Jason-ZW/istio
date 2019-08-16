@@ -481,7 +481,7 @@ func (s *DiscoveryServer) initConnectionNode(discReq *xdsapi.DiscoveryRequest, c
 	}
 	// Update the config namespace associated with this proxy
 	nt.ConfigNamespace = model.GetProxyConfigNamespace(nt)
-
+	adsLog.Infof("ssss %+v\n", nt)
 	if err := nt.SetServiceInstances(s.Env); err != nil {
 		return err
 	}

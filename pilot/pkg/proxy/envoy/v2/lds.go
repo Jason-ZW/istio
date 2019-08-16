@@ -16,6 +16,7 @@ package v2
 
 import (
 	"fmt"
+	"istio.io/pkg/log"
 
 	xdsapi "github.com/envoyproxy/go-control-plane/envoy/api/v2"
 	"github.com/gogo/protobuf/types"
@@ -49,6 +50,7 @@ func (s *DiscoveryServer) generateRawListeners(con *XdsConnection, push *model.P
 
 	for _, l := range rawListeners {
 		if err := l.Validate(); err != nil {
+			log.Infof("6666 %+v", l)
 			retErr := fmt.Errorf("LDS: Generated invalid listener for node %v: %v", con.modelNode, err)
 			adsLog.Errorf("LDS: Generated invalid listener for node:%s: %v, %v", con.modelNode.ID, err, l)
 			ldsBuildErrPushes.Increment()
