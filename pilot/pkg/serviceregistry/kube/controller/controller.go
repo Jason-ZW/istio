@@ -569,18 +569,17 @@ func (c *Controller) getProxyServiceInstancesByEndpoint(endpoints v1.Endpoints, 
 					continue
 				}
 
-				// There is only one IP for kube registry
-				proxyIP := proxy.IPAddresses[0]
+				for _, ip := range proxy.IPAddresses {
+					if hasProxyIP(ss.Addresses, ip) {
+						out = append(out, c.getEndpoints(ip, port.Port, svcPort, svc))
+					}
 
-				if hasProxyIP(ss.Addresses, proxyIP) {
-					out = append(out, c.getEndpoints(proxyIP, port.Port, svcPort, svc))
-				}
-
-				if hasProxyIP(ss.NotReadyAddresses, proxyIP) {
-					nrEP := c.getEndpoints(proxyIP, port.Port, svcPort, svc)
-					out = append(out, nrEP)
-					if c.Env != nil {
-						c.Env.PushContext.Add(model.ProxyStatusEndpointNotReady, proxy.ID, proxy, "")
+					if hasProxyIP(ss.NotReadyAddresses, ip) {
+						nrEP := c.getEndpoints(ip, port.Port, svcPort, svc)
+						out = append(out, nrEP)
+						if c.Env != nil {
+							c.Env.PushContext.Add(model.ProxyStatusEndpointNotReady, proxy.ID, proxy, "")
+						}
 					}
 				}
 			}
@@ -613,10 +612,10 @@ func (c *Controller) getProxyServiceInstancesByPod(pod *v1.Pod, service *v1.Serv
 			log.Warnf("Failed to find port for service %s/%s: %v", service.Namespace, service.Name, err)
 			continue
 		}
-		// There is only one IP for kube registry
-		proxyIP := proxy.IPAddresses[0]
 
-		out = append(out, c.getEndpoints(proxyIP, int32(portNum), svcPort, svc))
+		for _, ip := range proxy.IPAddresses {
+			out = append(out, c.getEndpoints(ip, int32(portNum), svcPort, svc))
+		}
 
 	}
 
@@ -903,6 +902,7 @@ func (c *Controller) InitNetworkLookup(meshNetworks *meshconfig.MeshNetworks) {
 	c.ranger = cidranger.NewPCTrieRanger()
 
 	for n, v := range meshNetworks.Networks {
+		log.Infof("4444 %+v, %+v\n", n, v)
 		for _, ep := range v.Endpoints {
 			if ep.GetFromCidr() != "" {
 				_, network, err := net.ParseCIDR(ep.GetFromCidr())
