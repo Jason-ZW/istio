@@ -15,9 +15,12 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
+	"github.com/intel/multus-cni/types"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 
@@ -27,6 +30,10 @@ import (
 	"istio.io/istio/pkg/config/labels"
 
 	"istio.io/pkg/log"
+)
+
+const (
+	cniNetworkStatus = "k8s.v1.cni.cncf.io/networks-status"
 )
 
 // PodCache is an eventually consistent pod cache
@@ -71,30 +78,34 @@ func (pc *PodCache) event(obj interface{}, ev model.Event) error {
 		}
 	}
 
-	ip := pod.Status.PodIP
+	ips := pc.getIPsWithCniAttach(pod)
 	// PodIP will be empty when pod is just created, but before the IP is assigned
 	// via UpdateStatus.
 
-	if len(ip) > 0 {
-		log.Infof("Handling event %s for pod %s in namespace %s -> %v", ev, pod.Name, pod.Namespace, ip)
+	if len(ips) > 0 {
+		log.Infof("Handling event %s for pod %s in namespace %s -> %v", ev, pod.Name, pod.Namespace, ips)
 		key := kube.KeyFunc(pod.Name, pod.Namespace)
 		switch ev {
 		case model.EventAdd:
 			switch pod.Status.Phase {
 			case v1.PodPending, v1.PodRunning:
 				// add to cache if the pod is running or pending
-				pc.keys[ip] = key
-				if pc.c != nil && pc.c.XDSUpdater != nil {
-					pc.c.XDSUpdater.WorkloadUpdate(ip, pod.ObjectMeta.Labels, pod.ObjectMeta.Annotations)
+				for _, ip := range ips {
+					pc.keys[ip] = key
+					if pc.c != nil && pc.c.XDSUpdater != nil {
+						pc.c.XDSUpdater.WorkloadUpdate(ip, pod.ObjectMeta.Labels, pod.ObjectMeta.Annotations)
+					}
 				}
 			}
 		case model.EventUpdate:
 			if pod.DeletionTimestamp != nil {
 				// delete only if this pod was in the cache
-				if pc.keys[ip] == key {
-					delete(pc.keys, ip)
-					if pc.c != nil && pc.c.XDSUpdater != nil {
-						pc.c.XDSUpdater.WorkloadUpdate(ip, nil, nil)
+				for _, ip := range ips {
+					if pc.keys[ip] == key {
+						delete(pc.keys, ip)
+						if pc.c != nil && pc.c.XDSUpdater != nil {
+							pc.c.XDSUpdater.WorkloadUpdate(ip, nil, nil)
+						}
 					}
 				}
 				return nil
@@ -102,25 +113,31 @@ func (pc *PodCache) event(obj interface{}, ev model.Event) error {
 			switch pod.Status.Phase {
 			case v1.PodPending, v1.PodRunning:
 				// add to cache if the pod is running or pending
-				pc.keys[ip] = key
-				if pc.c != nil && pc.c.XDSUpdater != nil {
-					pc.c.XDSUpdater.WorkloadUpdate(ip, pod.ObjectMeta.Labels, pod.ObjectMeta.Annotations)
+				for _, ip := range ips {
+					pc.keys[ip] = key
+					if pc.c != nil && pc.c.XDSUpdater != nil {
+						pc.c.XDSUpdater.WorkloadUpdate(ip, pod.ObjectMeta.Labels, pod.ObjectMeta.Annotations)
+					}
 				}
 			default:
 				// delete if the pod switched to other states and is in the cache
-				if pc.keys[ip] == key {
-					delete(pc.keys, ip)
-					if pc.c != nil && pc.c.XDSUpdater != nil {
-						pc.c.XDSUpdater.WorkloadUpdate(ip, nil, nil)
+				for _, ip := range ips {
+					if pc.keys[ip] == key {
+						delete(pc.keys, ip)
+						if pc.c != nil && pc.c.XDSUpdater != nil {
+							pc.c.XDSUpdater.WorkloadUpdate(ip, nil, nil)
+						}
 					}
 				}
 			}
 		case model.EventDelete:
 			// delete only if this pod was in the cache
-			if pc.keys[ip] == key {
-				delete(pc.keys, ip)
-				if pc.c != nil && pc.c.XDSUpdater != nil {
-					pc.c.XDSUpdater.WorkloadUpdate(ip, nil, nil)
+			for _, ip := range ips {
+				if pc.keys[ip] == key {
+					delete(pc.keys, ip)
+					if pc.c != nil && pc.c.XDSUpdater != nil {
+						pc.c.XDSUpdater.WorkloadUpdate(ip, nil, nil)
+					}
 				}
 			}
 		}
@@ -156,4 +173,34 @@ func (pc *PodCache) labelsByIP(addr string) (labels.Instance, bool) {
 		return nil, false
 	}
 	return configKube.ConvertLabels(pod.ObjectMeta), true
+}
+
+// getIPsWithCniAttach returns ips with cni attach
+func (pc *PodCache) getIPsWithCniAttach(pod *v1.Pod) []string {
+	ips := make([]string, 0)
+	if pod == nil {
+		return ips
+	}
+
+	ips = append(ips, pod.Status.PodIP)
+
+	if pod.Annotations == nil || len(pod.Annotations) == 0 {
+		return ips
+	}
+	if annotation, ok := pod.Annotations[cniNetworkStatus]; ok {
+		var status []*types.NetworkStatus
+		if annotation == "" || !strings.Contains(annotation, "ips") {
+			return ips
+		}
+
+		err := json.Unmarshal([]byte(annotation), &status)
+		if err != nil {
+			log.Errorf("unmarshal pod's cni network status error: %s\n", err.Error())
+			return ips
+		}
+		for _, status := range status {
+			ips = append(ips, status.IPs...)
+		}
+	}
+	return ips
 }

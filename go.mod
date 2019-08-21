@@ -88,6 +88,7 @@ require (
 	github.com/hashicorp/serf v0.8.1 // indirect
 	github.com/hashicorp/vault v0.10.0
 	github.com/howeyc/fsnotify v0.9.0
+	github.com/intel/multus-cni v0.0.0-20190820175408-7763f1593bfe
 	github.com/jefferai/jsonx v1.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.0.0-20160202185014-0b12d6b521d8 // indirect
 	github.com/juju/errors v0.0.0-20190207033735-e65537c515d7 // indirect

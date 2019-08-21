@@ -453,12 +453,14 @@ func (s *DiscoveryServer) WorkloadUpdate(id string, workloadLabels map[string]st
 			//   case 1: the workload has no sidecar proxy, no need xDS push at all.
 			//   case 2: the workload xDS connection has not been established,
 			//           also no need to trigger a full push here.
-			if connection.modelNode.IPAddresses[0] == id {
-				// There is a possibility that the pod comes up later than endpoint.
-				// So no endpoints add/update events after this, we should request
-				// full push immediately to speed up sidecar startup.
-				s.pushQueue.Enqueue(connection, &model.PushRequest{Full: true, Push: s.globalPushContext(), Start: time.Now()})
-				break
+			for _, ip := range connection.modelNode.IPAddresses {
+				if ip == id {
+					// There is a possibility that the pod comes up later than endpoint.
+					// So no endpoints add/update events after this, we should request
+					// full push immediately to speed up sidecar startup.
+					s.pushQueue.Enqueue(connection, &model.PushRequest{Full: true, Push: s.globalPushContext(), Start: time.Now()})
+					break
+				}
 			}
 		}
 		adsClientsMutex.RUnlock()
